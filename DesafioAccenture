@@ -1,0 +1,197 @@
+spring.datasource.url=jdbc:h2:mem:testdb
+spring.datasource.driverClassName=org.h2.Driver
+spring.datasource.username=sa
+spring.datasource.password=password
+spring.jpa.hibernate.ddl-auto=update
+spring.h2.console.enabled=true
+
+import javax.persistence.*;
+import java.time.LocalDate;
+import java.util.Set;
+
+@Entity
+public class Aluno {
+    @Id
+    @GeneratedValue(strategy = GenerationType.IDENTITY)
+    private Long id;
+    private String nome;
+    private String email;
+    private LocalDate dataCadastro;
+
+    @ManyToMany
+    @JoinTable(
+        name = "Inscricao",
+        joinColumns = @JoinColumn(name = "aluno_id"),
+        inverseJoinColumns = @JoinColumn(name = "curso_id")
+    )
+    private Set<Curso> cursos;
+
+    // Getters e Setters
+}
+
+import javax.persistence.*;
+import java.time.LocalDate;
+import java.util.Set;
+
+@Entity
+public class Curso {
+    @Id
+    @GeneratedValue(strategy = GenerationType.IDENTITY)
+    private Long id;
+    private String nome;
+    private String descricao;
+    private LocalDate dataCriacao;
+
+    @ManyToMany(mappedBy = "cursos")
+    private Set<Aluno> alunos;
+
+    // Getters e Setters
+}
+
+
+import javax.persistence.*;
+import java.time.LocalDate;
+
+@Entity
+public class Inscricao {
+    @Id
+    @GeneratedValue(strategy = GenerationType.IDENTITY)
+    private Long id;
+
+    @ManyToOne
+    @JoinColumn(name = "aluno_id")
+    private Aluno aluno;
+
+    @ManyToOne
+    @JoinColumn(name = "curso_id")
+    private Curso curso;
+
+    private LocalDate dataInscricao;
+
+    // Getters e Setters
+}
+
+import org.springframework.data.jpa.repository.JpaRepository;
+
+public interface AlunoRepository extends JpaRepository<Aluno, Long> {}
+public interface CursoRepository extends JpaRepository<Curso, Long> {}
+public interface InscricaoRepository extends JpaRepository<Inscricao, Long> {}
+
+public class AlunoDTO {
+    private Long id;
+    private String nome;
+    private String email;
+    private LocalDate dataCadastro;
+
+    // Getters e Setters
+}
+
+public class CursoDTO {
+    private Long id;
+    private String nome;
+    private String descricao;
+    private LocalDate dataCriacao;
+
+    // Getters e Setters
+}
+
+public class InscricaoPopulator {
+    public static AlunoDTO toAlunoDTO(Aluno aluno) {
+        AlunoDTO dto = new AlunoDTO();
+        dto.setId(aluno.getId());
+        dto.setNome(aluno.getNome());
+        dto.setEmail(aluno.getEmail());
+        dto.setDataCadastro(aluno.getDataCadastro());
+        return dto;
+    }
+
+    public static CursoDTO toCursoDTO(Curso curso) {
+        CursoDTO dto = new CursoDTO();
+        dto.setId(curso.getId());
+        dto.setNome(curso.getNome());
+        dto.setDescricao(curso.getDescricao());
+        dto.setDataCriacao(curso.getDataCriacao());
+        return dto;
+    }
+}
+
+import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.web.bind.annotation.*;
+
+import java.util.List;
+import java.util.stream.Collectors;
+
+@RestController
+@RequestMapping("/alunos")
+public class AlunoController {
+    @Autowired
+    private AlunoRepository alunoRepository;
+    @Autowired
+    private CursoRepository cursoRepository;
+
+    @PostMapping
+    public AlunoDTO cadastrarAluno(@RequestBody Aluno aluno) {
+        Aluno savedAluno = alunoRepository.save(aluno);
+        return InscricaoPopulator.toAlunoDTO(savedAluno);
+    }
+
+    @GetMapping("/{id}/cursos")
+    public List<CursoDTO> listarCursos(@PathVariable Long id) {
+        Aluno aluno = alunoRepository.findById(id).orElseThrow();
+        return aluno.getCursos().stream().map(InscricaoPopulator::toCursoDTO).collect(Collectors.toList());
+    }
+}
+
+import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.web.bind.annotation.*;
+
+import java.util.List;
+import java.util.stream.Collectors;
+
+@RestController
+@RequestMapping("/cursos")
+public class CursoController {
+    @Autowired
+    private CursoRepository cursoRepository;
+
+    @PostMapping
+    public CursoDTO cadastrarCurso(@RequestBody Curso curso) {
+        Curso savedCurso = cursoRepository.save(curso);
+        return InscricaoPopulator.toCursoDTO(savedCurso);
+    }
+
+    @GetMapping("/{id}/alunos")
+    public List<AlunoDTO> listarAlunos(@PathVariable Long id) {
+        Curso curso = cursoRepository.findById(id).orElseThrow();
+        return curso.getAlunos().stream().map(InscricaoPopulator::toAlunoDTO).collect(Collectors.toList());
+    }
+}
+
+import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.web.bind.annotation.*;
+
+import java.time.LocalDate;
+
+@RestController
+@RequestMapping("/inscricoes")
+public class InscricaoController {
+    @Autowired
+    private InscricaoRepository inscricaoRepository;
+    @Autowired
+    private AlunoRepository alunoRepository;
+    @Autowired
+    private CursoRepository cursoRepository;
+
+    @PostMapping
+    public void inscreverAluno(@RequestParam Long alunoId, @RequestParam Long cursoId) {
+        Aluno aluno = alunoRepository.findById(alunoId).orElseThrow();
+        Curso curso = cursoRepository.findById(cursoId).orElseThrow();
+
+        Inscricao inscricao = new Inscricao();
+        inscricao.setAluno(aluno);
+        inscricao.setCurso(curso);
+        inscricao.setDataInscricao(LocalDate.now());
+        inscricaoRepository.save(inscricao);
+    }
+}
+
